@@ -2,34 +2,35 @@
 
 class _FASTAGI {
 
-	const ST_INIT = 0x01; // new connection => read chanvars
-	const ST_RECV = 0x02; // writing command done => read responce
-	const ST_SEND = 0x04; // command is set to buffer => write buffer
+	const ST_INIT = 0x01;	// new connection => read chanvars
+	const ST_RECV = 0x02;	// writing command done => read responce
+	const ST_SEND = 0x04;	// command is set to buffer => write buffer
 
 
 	private $sock = null;
-	private $rxf = false;  // reindex is nessesary flag
-	private $verbosity = -1;
+	private $flag = false;	// reindex is nessesary
+	private $vvvv = -1;		// verbosity level
 
-	private $pt = []; // [0]stream, [1]status, [2]buffer, [3]chanvars, [4]event version
+	private $vars = [];		// status, buffer, chanvars, event version
+	private $conn;
 
-	public function __construct( $host, $port, $verbose = -1 ) {
-		$this->verbosity = $verbose;
+	public function __construct( $host, $port, $v = -1 ) {
+		$this->vvvv = $v;
 		$this->message( 1, 'Verbosity is set to '.$verbose );
 		$sock = @stream_socket_server( 'tcp://'.$host.':'.$port, $errno, $errstr );
 		if ( ! $sock ) {
 			echo $errstr.PHP_EOL;
 			exit -1;
 		}
-		$this->connect( $sock, 0 );
-		$this->sock = &$this->pt[0][0];
+		$this->connect( $sock );
+		$this->sock = &$this->conn[0];
 	}
 
 	public function worker( $callback ) {
 		$e = $w = null;
 		while ( 1 ) {
-			if ( $this->rxf ) $this->reindex();
-			$r = $this->list_sock();
+			if ( $this->flag ) $this->reindex();
+			$r = $this->conn;
 			$this->message( 4, '.' );
 
 			if ( ! stream_select( $r, $w, $e, null ) ) break;
@@ -41,52 +42,52 @@ class _FASTAGI {
 			}
 
 			// processing sockets
-			foreach ( $r as $k => $rd ) {
-				$a = &$this->pt[$k];
-				$buf = fread( $rd, 1024 );
+			foreach ( $r as $k => $sock ) {
+				$a = &$this->vars[$k];
+				$buf = fread( $sock, 1024 );
 				if ( ! $buf ) {
 					$this->message( 0, '#'.$k.' Read error' );
 					$this->disconnect( $k );
 					continue;
 				}
-				$a[2] .= $buf;
-				if ( $a[1] == self::ST_INIT && ( strpos( $a[2], "\n\n" ) !== false ) ) {
-					$a[3] = $this->parse( $a[2] );
+				$a['buffer'] .= $buf;
+				if ( $a['status'] == self::ST_INIT && ( strpos( $a['buffer'], "\n\n" ) !== false ) ) {
+					$a['chanvars'] = $this->parse( $a['buffer'] );
 					$this->message( 2, '#'.$k.' Argument parsing done, executing callback...' );
-					$a[2] = call_user_func( $callback, $a[4]++, [ 200, 0 ], $a[3] );
-					$a[1] = self::ST_SEND;
+					$a['buffer'] = call_user_func( $callback, $a['version']++, [ 200, 0 ], $a['chanvars'] );
+					$a['status'] = self::ST_SEND;
 					$this->message( 2, '#'.$k.' Write buffer is set' );
-				} elseif ( $a[1] == self::ST_RECV && ( strpos( $a[2], "\n" ) !== false ) ) {
-					if ( $a[2] == "HANGUP\n" ) {
+				} elseif ( $a['status'] == self::ST_RECV && ( strpos( $a['buffer'], "\n" ) !== false ) ) {
+					if ( $a['buffer'] == "HANGUP\n" ) {
 						$this->message( 2, '#'.$k.' Caller hangs up' );
 						$this->disconnect( $k );
 						continue;
-					} elseif ( preg_match( '/^(\d+)\s(?:result=)?(.*?)\s+/', $a[2], $r ) ) {
+					} elseif ( preg_match( '/^(\d+)\s(?:result=)?(.*?)\s+/', $a['buffer'], $r ) ) {
 						$this->message( 2, '#'.$k.' Responce was recieved, executing callback...' );
-						$a[2] = call_user_func( $callback, $a[4]++, [ $r[1], $r[2] ], $a[3] );
-						$a[1] = self::ST_SEND;
+						$a['buffer'] = call_user_func( $callback, $a['version']++, [ $r[1], $r[2] ], $a['chanvars'] );
+						$a['status'] = self::ST_SEND;
 						$this->message( 2, '#'.$k.' Write buffer is set' );
 					} else {
-						$this->message( 2, '#'.$k.' Undefined response: "'.trim( $a[2] ).'"' );
+						$this->message( 2, '#'.$k.' Undefined response: "'.trim( $a['buffer'] ).'"' );
 						$this->disconnect( $k );
 						continue;
 					}
 				}
-				if ( $a[1] == self::ST_SEND ) {
-					if ( ! $a[2] ) {
+				if ( $a['status'] == self::ST_SEND ) {
+					if ( ! $a['buffer'] ) {
 						$this->message( 2, '#'.$k.' Nothing to write' );
 						$this->disconnect( $k );
 						continue;
 					}
-					$buf = fwrite( $rd, $a[2]."\n" );
+					$buf = fwrite( $sock, $a['buffer']."\n" );
 					if ( ! $buf ) {
 						$this->message( 0, 'Write error' );
 						$this->disconnect( $k );
 						continue;
 					}
-					$a[2] = substr( $a[2], $buf - 1 );
-					if ( ! $a[2] ) {
-						$a[1] = self::ST_RECV;
+					$a['buffer'] = substr( $a['buffer'], $buf - 1 );
+					if ( ! $a['buffer'] ) {
+						$a['status'] = self::ST_RECV;
 						$this->message( 2, '#'.$k.' Writing done, waiting for responce' );
 					}
 				}
@@ -94,34 +95,26 @@ class _FASTAGI {
 		}
 	}
 
-	private function connect( $pt, $i = false ) {
-		if ( $i === false ) {
-			$this->message( 1, 'Accepting connection' );
-			$this->pt[] = [ $pt, self::ST_INIT, '', [], 0 ];
-		} else {
-			$this->pt[$i] = [ $pt, self::ST_INIT, '', [], 0 ];
-		}
+	private function connect( $pt ) {
+		$i = count( $this->conn );
+		if ( $i > 0 ) $this->message( 1, '#'.$i.' Accepting connection' );
+		$this->conn[$i] = $pt;
+		$this->vars[$i] = [ 'status' => self::ST_INIT, 'buffer' => '', 'chanvars' => [], 'version' => 0 ];
 	}
 
 	private function disconnect( $i ) {
-		$this->message( 1, 'Closing connection' );
-		fclose( $this->pt[$i][0] );
-		unset( $this->pt[$i] );
-		$this->rxf = true;
+		$this->message( 1, '#'.$i.' Closing connection' );
+		fclose( $this->conn[$i] );
+		unset( $this->conn[$i] );
+		unset( $this->vars[$i] );
+		$this->flag = true;
 	}
 	
 	private function reindex() {
 		$this->message( 1, 'Reindexing' );
-		$this->pt = array_values( $this->pt );
-		$this->rxf = false;
-	}
-
-	private function list_sock() {
-		$fff = [];
-		foreach( $this->pt as $k => $v ) {
-			$fff[$k] = $v[0];
-		}
-		return $fff;
+		$this->conn = array_values( $this->conn );
+		$this->vars = array_values( $this->vars );
+		$this->flag = false;
 	}
 
 	private function parse( $s ) {
@@ -136,19 +129,19 @@ class _FASTAGI {
 	}
 	
 	private function message( $level, $string ) {
-		if ( $level < 0 ||  $level > $this->verbosity ) return false;
+		if ( $level < 0 ||  $level > $this->vvvv ) return false;
 		switch ( $level ) {
 			case 0:
-				$string = '[error] '.$string;
+				$string = '[error]   '.$string;
 				break;
 			case 1:
-				$string = '[notice] '.$string;
+				$string = '[notice]  '.$string;
 				break;
 			case 2:
-				$string = '[debug] '.$string;
+				$string = '[debug]   '.$string;
 				break;
 			case 3:
-				$string = '[extra] '.$string;
+				$string = '[extra]   '.$string;
 				break;
 		}
 		echo $string.PHP_EOL;
