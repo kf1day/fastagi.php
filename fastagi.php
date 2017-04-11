@@ -1,22 +1,24 @@
 <?php
 
-class _FASTAGI {
+abstract class _FASTAGI {
 
 	const ST_INIT = 0x01;	// new connection => read chanvars
 	const ST_RECV = 0x02;	// writing command done => read responce
 	const ST_SEND = 0x04;	// command is set to buffer => write buffer
 
 
-	private $sock = null;
-	private $flag = false;	// reindex is nessesary
-	private $vvvv = -1;		// verbosity level
+	protected $sock = null;
+	protected $flag = false;	// reindex is nessesary
+	protected $vvvv = -1;		// verbosity level
 
-	private $vars = [];		// status, buffer, chanvars, event version
-	private $conn;
+	protected $vars = [];		// status, buffer, chanvars, event version
+	protected $conn;
 
-	public function __construct( $host, $port, $v = -1 ) {
+	final public function __construct( $host, $port ) {
+		$v = getopt( "vv:" );
+		$v = isset( $v['v'] ) ? count ( $v['v'] ) : 0 ;
 		$this->vvvv = $v;
-		$this->message( 1, 'Verbosity is set to '.$verbose );
+		$this->message( 1, 'Verbosity is set to '.$v );
 		$sock = @stream_socket_server( 'tcp://'.$host.':'.$port, $errno, $errstr );
 		if ( ! $sock ) {
 			echo $errstr.PHP_EOL;
@@ -24,9 +26,10 @@ class _FASTAGI {
 		}
 		$this->connect( $sock );
 		$this->sock = &$this->conn[0];
+		$this->worker();
 	}
 
-	public function worker( $callback ) {
+	final protected function worker() {
 		$e = $w = null;
 		while ( 1 ) {
 			if ( $this->flag ) $this->reindex();
@@ -54,7 +57,8 @@ class _FASTAGI {
 				if ( $a['status'] == self::ST_INIT && ( strpos( $a['buffer'], "\n\n" ) !== false ) ) {
 					$a['chanvars'] = $this->parse( $a['buffer'] );
 					$this->message( 2, '#'.$k.' Argument parsing done, executing callback...' );
-					$a['buffer'] = call_user_func( $callback, $a['version']++, [ 200, 0 ], $a['chanvars'] );
+					$cmd = $this->action( $a['version']++, [ 200, 0 ], $a['chanvars'] );
+					$a['buffer'] = ( $cmd === null ) ? '' : $cmd ;
 					$a['status'] = self::ST_SEND;
 					$this->message( 2, '#'.$k.' Write buffer is set' );
 				} elseif ( $a['status'] == self::ST_RECV && ( strpos( $a['buffer'], "\n" ) !== false ) ) {
@@ -64,7 +68,8 @@ class _FASTAGI {
 						continue;
 					} elseif ( preg_match( '/^(\d+)\s(?:result=)?(.*?)\s+/', $a['buffer'], $r ) ) {
 						$this->message( 2, '#'.$k.' Responce was recieved, executing callback...' );
-						$a['buffer'] = call_user_func( $callback, $a['version']++, [ $r[1], $r[2] ], $a['chanvars'] );
+						$cmd = $this->action( $a['version']++, [ $r[1], $r[2] ], $a['chanvars'] );
+						$a['buffer'] = ( $cmd === null ) ? '' : $cmd ;
 						$a['status'] = self::ST_SEND;
 						$this->message( 2, '#'.$k.' Write buffer is set' );
 					} else {
@@ -95,14 +100,14 @@ class _FASTAGI {
 		}
 	}
 
-	private function connect( $pt ) {
+	final protected function connect( $pt ) {
 		$i = count( $this->conn );
 		if ( $i > 0 ) $this->message( 1, '#'.$i.' Accepting connection' );
 		$this->conn[$i] = $pt;
 		$this->vars[$i] = [ 'status' => self::ST_INIT, 'buffer' => '', 'chanvars' => [], 'version' => 0 ];
 	}
 
-	private function disconnect( $i ) {
+	final protected function disconnect( $i ) {
 		$this->message( 1, '#'.$i.' Closing connection' );
 		fclose( $this->conn[$i] );
 		unset( $this->conn[$i] );
@@ -110,14 +115,14 @@ class _FASTAGI {
 		$this->flag = true;
 	}
 	
-	private function reindex() {
+	final protected function reindex() {
 		$this->message( 1, 'Reindexing' );
 		$this->conn = array_values( $this->conn );
 		$this->vars = array_values( $this->vars );
 		$this->flag = false;
 	}
 
-	private function parse( $s ) {
+	final protected function parse( $s ) {
 		$fff = [];
 		$tmp = explode( "\n", $s );
 		foreach ( $tmp as $v ) {
@@ -128,7 +133,7 @@ class _FASTAGI {
 		return $fff;
 	}
 	
-	private function message( $level, $string ) {
+	final protected function message( $level, $string ) {
 		if ( $level < 0 ||  $level > $this->vvvv ) return false;
 		switch ( $level ) {
 			case 0:
@@ -146,4 +151,6 @@ class _FASTAGI {
 		}
 		echo $string.PHP_EOL;
 	}
+	
+	abstract function action( $i, $status, $chanvars );
 }
