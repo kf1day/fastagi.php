@@ -16,7 +16,7 @@ abstract class _FASTAGI {
 
 	final public function __construct( $host, $port ) {
 		$v = getopt( "vv:" );
-		$v = isset( $v['v'] ) ? count ( $v['v'] ) : 0 ;
+		$v = isset( $v['v'] ) ? count ( $v['v'] ) : -1 ;
 		$this->vvvv = $v;
 		$this->message( 1, 'Verbosity is set to '.$v );
 		$sock = @stream_socket_server( 'tcp://'.$host.':'.$port, $errno, $errstr );
@@ -26,6 +26,7 @@ abstract class _FASTAGI {
 		}
 		$this->connect( $sock );
 		$this->sock = &$this->conn[0];
+		$this->init();
 		$this->worker();
 	}
 
@@ -152,5 +153,6 @@ abstract class _FASTAGI {
 		echo $string.PHP_EOL;
 	}
 	
+	function init(){}
 	abstract function action( $i, $status, $chanvars );
 }
