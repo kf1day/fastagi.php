@@ -61,18 +61,18 @@ abstract class _FASTAGI {
 					$cmd = $this->action( $a['version']++, [ 200, 0 ], $a['chanvars'] );
 					$a['buffer'] = ( $cmd === null ) ? '' : $cmd ;
 					$a['status'] = self::ST_SEND;
-					$this->message( 2, '#'.$k.' Write buffer is set' );
+					$this->message( 2, '#'.$k.' Write buffer is set: '.$a['buffer'] );
 				} elseif ( $a['status'] == self::ST_RECV && ( strpos( $a['buffer'], "\n" ) !== false ) ) {
 					if ( $a['buffer'] == "HANGUP\n" ) {
 						$this->message( 2, '#'.$k.' Caller hangs up' );
 						$this->disconnect( $k );
 						continue;
 					} elseif ( preg_match( '/^(\d+)\s(?:result=)?(.*?)\s+/', $a['buffer'], $r ) ) {
-						$this->message( 2, '#'.$k.' Responce was recieved, executing callback...' );
+						$this->message( 2, '#'.$k.' Responce recieved: '.$r[1].': '.$r[2].', executing callback...' );
 						$cmd = $this->action( $a['version']++, [ $r[1], $r[2] ], $a['chanvars'] );
 						$a['buffer'] = ( $cmd === null ) ? '' : $cmd ;
 						$a['status'] = self::ST_SEND;
-						$this->message( 2, '#'.$k.' Write buffer is set' );
+						$this->message( 2, '#'.$k.' Write buffer is set: '.$a['buffer'] );
 					} else {
 						$this->message( 2, '#'.$k.' Undefined response: "'.trim( $a['buffer'] ).'"' );
 						$this->disconnect( $k );
@@ -154,5 +154,5 @@ abstract class _FASTAGI {
 	}
 	
 	function init(){}
-	abstract function action( $i, $status, $chanvars );
+	abstract function action( $v, $status, &$chanvars );
 }

@@ -1,6 +1,6 @@
 <?php
 
-require 'core.php';
+require '../core.php';
 
 
 class instance extends _FASTAGI {
