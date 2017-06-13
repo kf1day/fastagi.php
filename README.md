@@ -8,10 +8,10 @@ Provides a class for creation AGI inet server operating in non-blocking mode
 ```
 <?php
 
-require 'fastagi.php';
+require 'core.php';
 class instance extends _FASTAGI {
 
-	function action( $i, $status, $chanvars ) {
+	function action( $i, $status, &$chanvars ) {
 		if ( $i == 0 ) return 'verbose "Got event while calling ' . $chanvars['extension'] . '"';
 		if ( $i < 3 ) return 'exec Dial "SIP/100,10"';
 	}
