@@ -1,11 +1,11 @@
 <?php
 
-require '../core.php';
+require '../fastagi.php';
 
 
-class instance extends _FASTAGI {
+class worker extends _FASTAGI {
 
-	function action( $i, $status, $chanvars ) {
+	function action( $i, $status, &$chanvars ) {
 		if ( $i == 0 ) {  // first command
 			return 'exec Dial "SIP/' . $chanvars['extension'] . ',30"'; // dial calling extension 
 		}
@@ -21,4 +21,4 @@ class instance extends _FASTAGI {
 	}
 }
 
-new instance( '127.0.0.1', 1038 );
+new worker( '127.0.0.1', 1038 );

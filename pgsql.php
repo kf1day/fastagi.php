@@ -1,6 +1,6 @@
 <?php
 
-class pgsql {
+class _PGSQL {
 
 	protected $pt = null;
 	protected $rx = null;
@@ -13,22 +13,23 @@ class pgsql {
 		if ( $base != '' ) $s .= ' dbname='.$base;
 		if ( $user != '' ) $s .= ' user='.$user;
 		if ( $pass != '' ) $s .= ' password='.$pass;
-		$this->pt = @pg_connect( $s );
+		$this->pt = pg_pconnect( $s );
 
 		if ( ! $this->pt ) {
 			throw new Exception( 'DBA connection failed' );
 		}
 	}
 
-	public function get( $table, $fields, $filter = false, $sort = false ) {
-		$fff = [];
+	public function get( $table, $fields, $filter = false, $group = false, $sort = false ) {
 		if ( is_array( $fields ) ) {
 			$fields = implode( '", "', $fields );
 		}
 		$q = 'SELECT "'.$fields.'" FROM "'.$table.'"';
 		if ( is_array( $filter ) && count( $filter ) > 0 ) {
 			$t = [];
-			foreach( $filter as $k => $v ) $t[] = '"'.$k.'" = '.$v.'';
+			foreach( $filter as $k => $v ) {
+				$t[] = '"'.$k.'" = '.$v.'';
+			}
 			$q .= ' WHERE '.implode( ' AND ', $t );
 		}
 		if ( ( is_array( $sort ) && count( $sort ) > 0 ) || ( $sort && $sort = [ $sort ] ) ) {
@@ -41,7 +42,13 @@ class pgsql {
 			}
 			$q .= ' ORDER BY '.implode( ', ', $t );
 		}
-		$this->rx = @pg_query( $q.';' );
+		$this->rx = @pg_query( $this->pt, $q.';' );
+		if ( ! $this->rx ) throw new Exception( 'DBA query error: '.$q.';' );
+		return pg_num_rows( $this->rx );
+	}
+	
+	public function raw( $q ) {
+		$this->rx = @pg_query( $this->pt, $q.';' );
 		if ( ! $this->rx ) throw new Exception( 'DBA query error: '.$q.';' );
 		return pg_num_rows( $this->rx );
 	}
@@ -57,7 +64,9 @@ class pgsql {
 	public function fetch_all() {
 		$fff = [];
 		if ( $this->rx ) {
-			while( $fff[] = pg_fetch_row( $this->rx ) );
+			while( $tmp = pg_fetch_row( $this->rx ) ) {
+				$fff[] = $tmp;
+			}
 		} else {
 			return false;
 		}
@@ -66,20 +75,23 @@ class pgsql {
 
 	public function put( $table, $fields ) {
 		if ( !is_array( $fields ) || count( $fields ) == 0 ) return false;
-		$q = 'INSERT INTO `'.$table.'` ('.implode(',', array_keys( $fields ) ).') VALUES("'.implode('", "', $fields ).'")';
-		$q = $this->pt->query( $q.';' );
-		return ( $q ) ? $this->pt->insert_id : false;
+		$q = 'INSERT INTO "'.$table.'" ("'.implode( '", "', array_keys( $fields ) ).'") VALUES('.implode(', ', $fields ).')';
+		$this->rx = @pg_query( $this->pt, $q.';' );
+		if ( ! $this->rx ) throw new Exception( 'DBA query error: '.$q.';' );
+		return pg_num_rows( $this->rx );
 	}
 
-	public function del( $table, $case ) {
-		if ( !is_array( $case ) || count( $case ) == 0 ) return false;
+	public function del( $table, $filter ) {
+		if ( !is_array( $filter ) || count( $filter ) == 0 ) return false;
 		$qcase = [];
 		foreach( $case as $k => $v ) {
-			$qcase[] = '`'.$k.'` = "'.$v.'"';
+			$qcase[] = '"'.$k.'" = '.$v;
 		}
-		$q = 'DELETE FROM `'.$table.'` WHERE '.implode( ' AND ', $qcase );
+		$q = 'DELETE FROM "'.$table.'" WHERE '.implode( ' AND ', $qcase );
 		$q = $this->pt->query( $q.';' );
-		return ( $q ) ? $this->pt->affected_rows : false;
+		$this->rx = @pg_query( $this->pt, $q.';' );
+		if ( ! $this->rx ) throw new Exception( 'DBA query error: '.$q.';' );
+		return pg_affected_rows( $this->rx );
 	}
 
 	public function upd( $table, $fields, $case ) {

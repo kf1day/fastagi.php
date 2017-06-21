@@ -1,15 +1,15 @@
 <?php
 
-require '../core.php';
+require '../fastagi.php';
 require '../pgsql.php';
 
-class instance extends _FASTAGI {
+class worker extends _FASTAGI {
 	
 	private $dba = null;
 	
 	function init() {
 
-		$this->dba = new pgsql( '', '', '', 'asterisk', 's3cret' );
+		$this->dba = new _PGSQL( '', '', '', 'asterisk', 's3cret' );
 		$this->message( 1, 'DBA connection OK' );
 	}
 
@@ -32,4 +32,4 @@ class instance extends _FASTAGI {
 	}
 }
 
-new instance( '127.0.0.1', 1038 );
+new worker( '127.0.0.1', 1038 );
