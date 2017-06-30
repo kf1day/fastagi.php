@@ -4,6 +4,12 @@ class _PGSQL {
 
 	protected $pt = null;
 	protected $rx = null;
+	
+	protected function pingloop() {
+		while ( ! pg_ping( $this->pt ) ) {
+			sleep( 1 );
+		}
+	}
 
 	public function __construct( $host, $port, $base, $user, $pass ) {
 
@@ -21,6 +27,7 @@ class _PGSQL {
 	}
 
 	public function get( $table, $fields, $filter = false, $group = false, $sort = false ) {
+		$this->pingloop();
 		if ( is_array( $fields ) ) {
 			$fields = implode( '", "', $fields );
 		}
@@ -48,6 +55,7 @@ class _PGSQL {
 	}
 	
 	public function raw( $q ) {
+		$this->pingloop();
 		$this->rx = @pg_query( $this->pt, $q.';' );
 		if ( ! $this->rx ) throw new Exception( 'DBA query error: '.$q.';' );
 		return pg_num_rows( $this->rx );
@@ -74,6 +82,7 @@ class _PGSQL {
 	}
 
 	public function put( $table, $fields ) {
+		$this->pingloop();
 		if ( !is_array( $fields ) || count( $fields ) == 0 ) return false;
 		$q = 'INSERT INTO "'.$table.'" ("'.implode( '", "', array_keys( $fields ) ).'") VALUES('.implode(', ', $fields ).')';
 		$this->rx = @pg_query( $this->pt, $q.';' );
@@ -82,6 +91,7 @@ class _PGSQL {
 	}
 
 	public function del( $table, $filter ) {
+		$this->pingloop();
 		if ( !is_array( $filter ) || count( $filter ) == 0 ) return false;
 		$qcase = [];
 		foreach( $case as $k => $v ) {
@@ -95,6 +105,7 @@ class _PGSQL {
 	}
 
 	public function upd( $table, $fields, $case ) {
+		$this->pingloop();
 		if ( !is_array( $fields ) || count( $fields ) == 0 ) return false;
 		if ( !is_array( $case ) || count( $case ) == 0 ) return false;
 		$q = [];
