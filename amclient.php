@@ -40,7 +40,7 @@ abstract class _AMCLIENT {
 					return false;
 				}
 			}
-			sleep( 1 );
+			sleep( 0.5 );
 		}
 
 		
@@ -68,6 +68,7 @@ abstract class _AMCLIENT {
 //				echo '> '.$e['Event'].PHP_EOL;
 				$this->action( $e );
 			}
+			pcntl_signal_dispatch();
 		}
 	}
 
