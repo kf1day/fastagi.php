@@ -94,7 +94,7 @@ class _PGSQL {
 		$this->pingloop();
 		if ( !is_array( $filter ) || count( $filter ) == 0 ) return false;
 		$qcase = [];
-		foreach( $case as $k => $v ) {
+		foreach( $filter as $k => $v ) {
 			$qcase[] = '"'.$k.'" = '.$v;
 		}
 		$q = 'DELETE FROM "'.$table.'" WHERE '.implode( ' AND ', $qcase );
@@ -104,21 +104,22 @@ class _PGSQL {
 		return pg_affected_rows( $this->rx );
 	}
 
-	public function upd( $table, $fields, $case ) {
+	public function upd( $table, $fields, $filter ) {
 		$this->pingloop();
 		if ( !is_array( $fields ) || count( $fields ) == 0 ) return false;
-		if ( !is_array( $case ) || count( $case ) == 0 ) return false;
-		$q = [];
+		if ( !is_array( $filter ) || count( $filter ) == 0 ) return false;
+		$qfields = $qfilter = [];
+		
 		foreach( $fields as $k => $v ) {
-			if ( !is_numeric( $v ) ) $v = '"'.$v.'"';
-			$qfields[] = '`'.$k.'` = '.$v;
+			$qfields[] = '"'.$k.'" = '.$v;
 		}
-		foreach( $case as $k => $v ) {
-			$qcase[] = '`'.$k.'` = "'.$v.'"';
+		foreach( $filter as $k => $v ) {
+			$qfilter[] = '"'.$k.'" = '.$v;
 		}
-		$q = 'UPDATE `'.$table.'` SET '.implode( ', ', $qfields).' WHERE '.implode( ' AND ', $qcase );
-		$q = $this->pt->query( $q.';' );
-		return ( $q ) ? $this->pt->affected_rows : false;
+		$q = 'UPDATE "'.$table.'" SET '.implode( ', ', $qfields).' WHERE '.implode( ' AND ', $qfilter );
+		$this->rx = pg_query( $this->pt, $q.';' );
+		if ( ! $this->rx ) throw new Exception( 'DBA query error: '.$q.';' );
+		return pg_affected_rows( $this->rx );
 	}
 
 }
